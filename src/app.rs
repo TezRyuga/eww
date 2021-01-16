@@ -261,7 +261,6 @@ impl App {
     }
 
     pub fn load_css(&mut self, css: &str) {
-        // XXX This may error but gtk doesn't tell us,...
         self.css_provider.load_from_data(css.as_bytes());
     }
 
