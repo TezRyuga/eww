@@ -1,6 +1,8 @@
 use crate::{app, config, eww_state::*, ipc_server, script_var_handler, try_logging_errors, util};
 use anyhow::*;
 use futures_util::StreamExt;
+use gtk4 as gtk;
+use gtk4::gdk;
 use std::{
     collections::HashMap,
     os::unix::io::AsRawFd,
@@ -44,24 +46,21 @@ pub fn initialize_server() -> Result<()> {
         app_evt_send: ui_send.clone(),
     };
 
-    if let Some(screen) = gdk::Screen::get_default() {
-        gtk::StyleContext::add_provider_for_screen(&screen, &app.css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
-    }
-
     if let Ok(eww_css) = util::parse_scss_from_file(&scss_file_path) {
-        app.load_css(&eww_css)?;
+        app.load_css(&eww_css);
     }
 
     // initialize all the handlers and tasks running asyncronously
     init_async_part(config_file_path, scss_file_path, ui_send);
 
-    glib::MainContext::default().spawn_local(async move {
+    gtk4::glib::MainContext::default().spawn_local(async move {
         while let Some(event) = ui_recv.recv().await {
             app.handle_command(event);
         }
     });
 
-    gtk::main();
+    glib_run_main();
+
     log::info!("main application thread finished");
 
     Ok(())
@@ -170,4 +169,19 @@ fn do_detach() -> Result<()> {
     }
 
     Ok(())
+}
+
+lazy_static::lazy_static! {
+    static ref RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+}
+
+fn glib_run_main() {
+    let main_context = gtk4::glib::MainContext::default();
+    while RUNNING.load(std::sync::atomic::Ordering::Relaxed) {
+        main_context.iteration(true);
+    }
+}
+
+pub fn glib_stop_main() {
+    RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
 }
